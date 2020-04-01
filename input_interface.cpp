@@ -3,7 +3,69 @@
 ******************************************************************************/
 #include <stdlib.h>
 #include <stdio.h>
-#include "address_map_arm.h"
+
+// address_map_arm.h --------------------------------------------------------------------------------------------------------
+#define BOARD                 "DE1-SoC"
+
+/* Memory */
+#define DDR_BASE              0x00000000
+#define DDR_END               0x3FFFFFFF
+#define A9_ONCHIP_BASE        0xFFFF0000
+#define A9_ONCHIP_END         0xFFFFFFFF
+#define SDRAM_BASE            0xC0000000
+#define SDRAM_END             0xC3FFFFFF
+#define FPGA_ONCHIP_BASE      0xC8000000
+#define FPGA_ONCHIP_END       0xC803FFFF
+#define FPGA_CHAR_BASE        0xC9000000
+#define FPGA_CHAR_END         0xC9001FFF
+
+/* Cyclone V FPGA devices */
+#define LEDR_BASE             0xFF200000
+#define HEX3_HEX0_BASE        0xFF200020
+#define HEX5_HEX4_BASE        0xFF200030
+#define SW_BASE               0xFF200040
+#define KEY_BASE              0xFF200050
+#define JP1_BASE              0xFF200060
+#define JP2_BASE              0xFF200070
+#define PS2_BASE              0xFF200100
+#define PS2_DUAL_BASE         0xFF200108
+#define JTAG_UART_BASE        0xFF201000
+#define JTAG_UART_2_BASE      0xFF201008
+#define IrDA_BASE             0xFF201020
+#define TIMER_BASE            0xFF202000
+#define AV_CONFIG_BASE        0xFF203000
+#define PIXEL_BUF_CTRL_BASE   0xFF203020
+#define CHAR_BUF_CTRL_BASE    0xFF203030
+#define AUDIO_BASE            0xFF203040
+#define VIDEO_IN_BASE         0xFF203060
+#define ADC_BASE              0xFF204000
+
+/* Cyclone V HPS devices */
+#define HPS_GPIO1_BASE        0xFF709000
+#define HPS_TIMER0_BASE       0xFFC08000
+#define HPS_TIMER1_BASE       0xFFC09000
+#define HPS_TIMER2_BASE       0xFFD00000
+#define HPS_TIMER3_BASE       0xFFD01000
+#define FPGA_BRIDGE           0xFFD0501C
+
+/* ARM A9 MPCORE devices */
+#define   PERIPH_BASE         0xFFFEC000    // base address of peripheral devices
+#define   MPCORE_PRIV_TIMER   0xFFFEC600    // PERIPH_BASE + 0x0600
+
+/* Interrupt controller (GIC) CPU interface(s) */
+#define MPCORE_GIC_CPUIF      0xFFFEC100    // PERIPH_BASE + 0x100
+#define ICCICR                0x00          // offset to CPU interface control reg
+#define ICCPMR                0x04          // offset to interrupt priority mask reg
+#define ICCIAR                0x0C          // offset to interrupt acknowledge reg
+#define ICCEOIR               0x10          // offset to end of interrupt reg
+/* Interrupt controller (GIC) distributor interface(s) */
+#define MPCORE_GIC_DIST       0xFFFED000    // PERIPH_BASE + 0x1000
+#define ICDDCR                0x00          // offset to distributor control reg
+#define ICDISER               0x100         // offset to interrupt set-enable regs
+#define ICDICER               0x180         // offset to interrupt clear-enable regs
+#define ICDIPTR               0x800         // offset to interrupt processor targets regs
+#define ICDICFR               0xC00         // offset to interrupt configuration regs
+//------------------------------------------------------------------------------------------------------------------------------------------------------
 
 #define N 10
 #define HEIGHT 120
@@ -12,10 +74,16 @@
 #define INITIAL 21
 #define SPACE 31
 #define WIDTH 27
+#define UP 1
+#define DOWN 2
+#define RIGHT 3
+#define LEFT 4
 
 //Global Variables
 volatile int pixel_buffer_start;
 int numbers[N];
+int current;
+
 
 //Forward Declaration
 void HEX_PS2(char, char, char);
@@ -25,6 +93,7 @@ void wait_for_vsync();
 void plot_pixel(int x, int y, short int line_color);
 void draw_rectangle(int xPos, int height, short int box_color);
 void draw_array();
+void modify_array(int instruction);
 
 short color[10] = {0xFFFF, 0xF800, 0x07E0, 0x001F, 0x3478, 0xEAFF, 0x07FF, 0xF81F, 0xFFE0, 0x9909}; //List of colors to choose from
 
@@ -47,13 +116,16 @@ int main(void) {
     *(pixel_ctrl_ptr + 1) = 0xC0000000;
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
     initialize();
-    int PS2_data, RVALID;
+    int PS2_data, RVALID, RAVAIL;
     char byte1 = 0, byte2 = 0, byte3 = 0; // Stores the data from the key
-    // PS/2 mouse needs to be reset (must be already plugged in)
     *(PS2_ptr) = 0xFF; // reset
+
+    current = 0;
+
     while (1) {
         PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
         RVALID = PS2_data & 0x8000; // extract the RVALID field
+        RAVAIL = *(PS2_ptr) & 0xFFFF0000; // How many data are in the key
         if (RVALID) {
             /* shift the next data byte into the display */
             // byte1 byte2 byte3
@@ -61,20 +133,24 @@ int main(void) {
             byte2 = byte3;
             byte3 = PS2_data & 0xFF; //New data
             HEX_PS2(byte1, byte2, byte3);
-            if(byte2 == 0xF0){ // No key is being pressed
-
-            }else{ // some key is being pressed
-
+        }
+        if(RAVAIL == 0){ // The FIFO is empty and all input have been recieved
+            int instruction = 0;
+            if((byte1 == 0xE0) & (byte2 == 0xE0)){ //Pressed arrow
+                if(byte3 == 0x75) instruction = UP;
+                if(byte3 == 0x6B) instruction = LEFT;
+                if(byte3 == 0x74) instruction = RIGHT;
+                if(byte3 == 0x72) instruction = DOWN;
             }
-            if ((byte2 == (char)0xAA) && (byte3 == (char)0x00))
-            // mouse inserted; initialize sending of data
-                *(PS2_ptr) = 0xF4;
+            modify_array(instruction);
+            byte1 = 0; // terminate instructions
+            byte2 = 0;
+            byte3 = 0;
         }
         clear_screen();
         draw_array();
         wait_for_vsync(); // swap front and back buffers on VGA vertical sync
         pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
-        
     }
 }
 
@@ -144,7 +220,11 @@ void wait_for_vsync(){
 
 void draw_array(){
     for(int i=0; i < N; i++){
-        draw_rectangle(INITIAL + SPACE*i, numbers[i], color[1]); 
+        if(i == current){
+            draw_rectangle(INITIAL + SPACE*i, numbers[i], color[2]); 
+        }else{
+            draw_rectangle(INITIAL + SPACE*i, numbers[i], color[1]); 
+        }
     }
 }
 
@@ -156,4 +236,32 @@ void draw_rectangle(int xPos, int height, short int box_color){
         }
     }
 
+}
+
+void modify_array(int instruction){
+    if(instruction == UP){
+        if(numbers[current] != HEIGHT){
+            if((numbers[current] + 10) >= HEIGHT){
+                numbers[current] = HEIGHT;
+            }else{
+                numbers[current] += 10;
+            }
+        }
+    }if(instruction == DOWN){
+        if(numbers[current] != 0){
+            if((numbers[current] - 10) <= 0){
+                numbers[current] = 0;
+            }else{
+                numbers[current] -= 10;
+            }
+        }
+    }if(instruction == RIGHT){
+        if(current != (N - 1)){
+            current = current + 1;
+        }
+    }if(instruction == LEFT){
+        if(current != 0){
+            current = current - 1;
+        }
+    }
 }
