@@ -1,28 +1,44 @@
+#include <stdlib.h>
+#include <time.h>
+
 #define Y_LIMIT 120
-#define ANIMATION_SPEED 1
+#define ANIMATION_SPEED 4
+
+#define N 10
+#define HEIGHT 100
+#define xBound 320
+#define yBound 240
+#define INITIAL 21
+#define SPACE 31
+#define WIDTH 27
+
+
 
 //Gloabl Variables:
 volatile int pixel_buffer_start; 
 volatile int * pixel_ctrl_ptr;
-volatile int * status_ptr;
+int numbers[N];
+short color[10] = {0xFFFF, 0xF800, 0x07E0, 0x001F, 0x3478, 0xEAFF, 0x07FF, 0xF81F, 0xFFE0, 0x9909}; //List of colors to choose from
 
 //Forward declarations:
-void delay(int milliseconds);
 void clear_screen();
 void draw_rectangle(int xPos, int yPos, int height, short int box_color);
 void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box_color1, short int box_color2);
+void swap(int* x, int* y);
+void bubble_sort(int a[], int size);
 void wait_for_vsync();
+
+void initialize();
+void draw_array();
 
 
 int main(void)
 {
     pixel_ctrl_ptr = (int *)0xFF203020;
-    status_ptr = pixel_ctrl_ptr + 3; // pointer to status register
 
     /* set front pixel buffer to start of FPGA On-chip memory */
     *(pixel_ctrl_ptr + 1) = 0xC8000000; // first store the address in the back buffer
     /* now, swap the front/back buffers, to set the front buffer location */
-    *pixel_ctrl_ptr = 1; //Write 1 to controller to start synchronizing with the VGA
     wait_for_vsync();
 
 
@@ -32,15 +48,17 @@ int main(void)
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
 
 
+    srand(time(0));
+    initialize(); //Initialize array
     /*Clear both buffers before doing any drawing*/
     clear_screen(); //Clear buffer 1
+    draw_array();
     //swap buffers
-    *pixel_ctrl_ptr = 1; //Write 1 to controller to start synchronizing with the VGA
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
     clear_screen(); //Clear buffer 2
+    draw_array();
     //swap buffers
-    *pixel_ctrl_ptr = 1; //Write 1 to controller to start synchronizing with the VGA
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
 
@@ -51,14 +69,19 @@ int main(void)
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
 
 
+    //swap buffers
+    wait_for_vsync();
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
 
-    animate_swap(80, 130, 100, 100, 0xF800, 0x001F);
+    bubble_sort(numbers, N);
+
+    
 
 }
 
 
 
-void draw_pixel(int x, int y, short int line_color){
+void plot_pixel(int x, int y, short int line_color){
     *(short int *)(pixel_buffer_start + (y << 10) + (x << 1)) = line_color;
 }
 
@@ -68,7 +91,7 @@ void draw_rectangle(int xPos, int yPos, int height, short int box_color){
     
     for (int i = xPos - 13 ; i <= xPos + 13; i++){
         for(int j = 239 -yPos - height; j <= 239 -yPos; j++){
-            draw_pixel(i, j, box_color);
+            plot_pixel(i, j, box_color);
         }
     }
 
@@ -78,7 +101,7 @@ void draw_rectangle(int xPos, int yPos, int height, short int box_color){
 void clear_screen(){
     for (int x = 0; x < 320; x++){
         for (int y = 0; y< 240; y++){
-            draw_pixel(x, y, 0x0000);
+            plot_pixel(x, y, 0x0000);
         }
     }
 }
@@ -87,17 +110,52 @@ void clear_screen(){
 //Call this function after writing 1 to the pixel_buffer_controller 
 //in order to wait for buffer/backbuffer swap to occur
 void wait_for_vsync(){
-    int status = *status_ptr;
-    status = status & 1; // Bitwise and in order to isolate the s bit
-    
-    while(status){ //While loop waits for status to be set to 0, in order to synchronize with the VGA
-        status = *status_ptr;
-        status = status&1; // Bitwise and in order to isolate the s bit
+    register int status;
+
+    *pixel_ctrl_ptr = 1; //Set the S bit to 1
+
+    //Wait til the S bit turns into 0 meaning the last pixel reached
+    status = *(pixel_ctrl_ptr + 3);
+    while((status & 0x01) != 0){
+        status = *(pixel_ctrl_ptr + 3);
     }
-    return;
 }
 
 
+void swap(int* x, int* y){
+
+    int temp = *x; //Store old value stored at x
+    *x = *y; //Put value at y into x
+    *y = temp; //Value at y will be old value at x
+
+}
+
+// A function to implement bubble sort 
+void bubble_sort(int a[], int size) { 
+
+   for (int i = 0; i < size-1; i++){       
+
+       for (int j = 0; j < size-i-1; j++){
+
+           
+           if (a[j] > a[j+1]) {
+
+              //Animate the swap of the rectangles
+              int xPos1 = INITIAL + SPACE*j;
+              int xPos2 = INITIAL + SPACE*(j+1);
+              animate_swap(xPos1,xPos2,a[j], a[j+1] ,color[1], color[1]);
+
+            //Swap the array elements 
+              swap(&a[j], &a[j+1]); 
+
+
+           }
+
+       }
+
+   }
+
+} 
 
 
 
@@ -112,19 +170,22 @@ void wait_for_vsync(){
 void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box_color1, short int box_color2){
 
     //Lifting Rect 2 up
+    int startY = 0;
     int y;
-    for (y = 0; y <= Y_LIMIT; y += ANIMATION_SPEED){
+    for (y = startY; y <= Y_LIMIT; y += ANIMATION_SPEED){
 
         //Erase previous rectangle
         if (y >= 2*ANIMATION_SPEED){
             draw_rectangle(xPos2, y - 2*ANIMATION_SPEED, height2, 0x0000); //Note that previous rectangle on the swapped buffer was two positions behind current position
+        }
+        else{
+            draw_rectangle(xPos2, startY, height2, 0x0000); 
         }
 
         //Draw new rectangle
         draw_rectangle(xPos2, y, height2, box_color2);
 
         //swap buffers
-        *pixel_ctrl_ptr = 1; //Write 1 to controller to start synchronizing with the VGA
         wait_for_vsync();
         pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
 
@@ -135,7 +196,6 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
     //Make sure image is aligned in the two buffers
     draw_rectangle(xPos2, y - ANIMATION_SPEED, height2, 0x0000);
     draw_rectangle(xPos2, Y_LIMIT, height2, box_color2);
-    *pixel_ctrl_ptr = 1; //Write 1 to controller to start synchronizing with the VGA
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
     draw_rectangle(xPos2, y, height2, 0x0000);
@@ -150,12 +210,14 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
         if (x >= xPos1 + 2*ANIMATION_SPEED){
             draw_rectangle(x - 2*ANIMATION_SPEED, 0, height1, 0x0000); //Note that previous rectangle on the swapped buffer was two positions behind current position
         }
+        else{
+            draw_rectangle(xPos1, 0, height1, 0x0000);
+        }
 
         //Draw new rectangle
         draw_rectangle(x, 0, height1, box_color1);
 
         //swap buffers
-        *pixel_ctrl_ptr = 1; //Write 1 to controller to start synchronizing with the VGA
         wait_for_vsync();
         pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
 
@@ -166,7 +228,6 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
     x = x - ANIMATION_SPEED;
     draw_rectangle(x - ANIMATION_SPEED, 0, height1, 0x0000);
     draw_rectangle(xPos2, 0, height1, box_color1);
-    *pixel_ctrl_ptr = 1; //Write 1 to controller to start synchronizing with the VGA
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
     draw_rectangle(x, 0, height1, 0x0000);
@@ -184,7 +245,6 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
         draw_rectangle(x, y, height2, box_color2);
 
         //swap buffers
-        *pixel_ctrl_ptr = 1; //Write 1 to controller to start synchronizing with the VGA
         wait_for_vsync();
         pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
 
@@ -195,7 +255,6 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
     x = x + ANIMATION_SPEED;
     draw_rectangle(x + ANIMATION_SPEED, y, height2, 0x0000);
     draw_rectangle(xPos1, y, height2, box_color2);
-    *pixel_ctrl_ptr = 1; //Write 1 to controller to start synchronizing with the VGA
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
     draw_rectangle(x, y, height2, 0x0000);
@@ -212,7 +271,6 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
         draw_rectangle(x, y, height2, box_color2);
 
         //swap buffers
-        *pixel_ctrl_ptr = 1; //Write 1 to controller to start synchronizing with the VGA
         wait_for_vsync();
         pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
 
@@ -223,7 +281,6 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
     y = y + ANIMATION_SPEED;
     draw_rectangle(x, y + ANIMATION_SPEED, height2, 0x0000);
     draw_rectangle(x, 0, height2, box_color2);
-    *pixel_ctrl_ptr = 1; //Write 1 to controller to start synchronizing with the VGA
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
     draw_rectangle(x, y, height2, 0x0000);
@@ -231,4 +288,21 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
     draw_rectangle(x, y, height2, box_color2);
 
 
+}
+
+
+
+
+
+void initialize(){
+    for(int i=0; i < N; i++){
+        numbers[i] = rand()%HEIGHT + 1;
+    }
+}
+
+
+void draw_array(){
+    for(int i=0; i < N; i++){
+        draw_rectangle(INITIAL + SPACE*i, 0, numbers[i], color[1]); 
+    }
 }

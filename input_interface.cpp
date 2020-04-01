@@ -50,29 +50,37 @@ int main(void) {
 
     int PS2_data, RVALID;
     char byte1 = 0, byte2 = 0, byte3 = 0; // Stores the data from the key
-    while (1) {
-        PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
-        RVALID = PS2_data & 0x8000; // extract the RVALID field
-        if (RVALID) {
-            /* shift the next data byte into the display */
-            // byte1 byte2 byte3
-            byte1 = byte2;
-            byte2 = byte3;
-            byte3 = PS2_data & 0xFF; //New data
-            HEX_PS2(byte1, byte2, byte3);
-            if(byte2 == 0xF0){ // No key is being pressed
 
-            }else{ // some key is being pressed
 
-            }
 
-        }
-        clear_screen();
-        draw_array();
-        wait_for_vsync(); // swap front and back buffers on VGA vertical sync
-        pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
-    }
+
+    // while (1) {
+    //     PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
+    //     RVALID = PS2_data & 0x8000; // extract the RVALID field
+    //     if (RVALID) {
+    //         /* shift the next data byte into the display */
+    //         // byte1 byte2 byte3
+    //         byte1 = byte2;
+    //         byte2 = byte3;
+    //         byte3 = PS2_data & 0xFF; //New data
+    //         HEX_PS2(byte1, byte2, byte3);
+    //         if(byte2 == 0xF0){ // No key is being pressed
+
+    //         }else{ // some key is being pressed
+
+    //         }
+
+    //     }
+    //     clear_screen();
+    //     draw_array();
+    //     wait_for_vsync(); // swap front and back buffers on VGA vertical sync
+    //     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+    // }
 }
+
+
+
+
 /****************************************************************************************
 * Subroutine to show a string of HEX data on the HEX displays
 ****************************************************************************************/
