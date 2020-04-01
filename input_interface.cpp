@@ -3,11 +3,16 @@
 ******************************************************************************/
 #include <stdlib.h>
 #include <stdio.h>
+#include "address_map_arm.h"
 
 #define N 10
-#define RANGE 16
+#define HEIGHT 120
 #define xBound 320
 #define yBound 240
+#define INITIAL 21
+#define SPACE 31
+#define WIDTH 27
+
 //Global Variables
 volatile int pixel_buffer_start;
 int numbers[N];
@@ -19,6 +24,9 @@ void clear_screen();
 void wait_for_vsync();
 void plot_pixel(int x, int y, short int line_color);
 void draw_rectangle(int xPos, int height, short int box_color);
+void draw_array();
+
+short color[10] = {0xFFFF, 0xF800, 0x07E0, 0x001F, 0x3478, 0xEAFF, 0x07FF, 0xF81F, 0xFFE0, 0x9909}; //List of colors to choose from
 
 int main(void) {
     // Declare the pointer to the PS/2 port and pixel buffer controller
@@ -60,7 +68,7 @@ int main(void) {
 
         }
         clear_screen();
-        draw_rectangle(150, 200,  0x001F);
+        draw_array();
         wait_for_vsync(); // swap front and back buffers on VGA vertical sync
         pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
     }
@@ -95,7 +103,7 @@ void HEX_PS2(char b1, char b2, char b3) {
 
 void initialize(){
     for(int i=0; i < N; i++){
-        numbers[i] = rand()%RANGE;
+        numbers[i] = rand()%HEIGHT + 1;
     }
 }
 
@@ -125,6 +133,12 @@ void wait_for_vsync(){
     }
 }
 
+
+void draw_array(){
+    for(int i=0; i < N; i++){
+        draw_rectangle(INITIAL + SPACE*i, numbers[i], color[1]); 
+    }
+}
 
 void draw_rectangle(int xPos, int height, short int box_color){
     
