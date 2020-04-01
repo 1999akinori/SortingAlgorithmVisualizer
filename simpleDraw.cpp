@@ -1,4 +1,5 @@
 #define Y_LIMIT 120
+#define ANIMATION_SPEED 1
 
 //Gloabl Variables:
 volatile int pixel_buffer_start; 
@@ -112,11 +113,11 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
 
     //Lifting Rect 2 up
     int y;
-    for (y = 0; y <= Y_LIMIT; y++){
+    for (y = 0; y <= Y_LIMIT; y += ANIMATION_SPEED){
 
         //Erase previous rectangle
-        if (y >= 2){
-            draw_rectangle(xPos2, y - 2, height2, 0x0000); //Note that previous rectangle on the swapped buffer was two positions behind current position
+        if (y >= 2*ANIMATION_SPEED){
+            draw_rectangle(xPos2, y - 2*ANIMATION_SPEED, height2, 0x0000); //Note that previous rectangle on the swapped buffer was two positions behind current position
         }
 
         //Draw new rectangle
@@ -130,18 +131,24 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
         //Update location
         //done using the for loop
     }
-    y = y-1; //store the last position of rect 2
+    y = y-ANIMATION_SPEED; //store the last position of rect 2
     //Make sure image is aligned in the two buffers
-    draw_rectangle(xPos2, y - 1, height2, 0x0000);
+    draw_rectangle(xPos2, y - ANIMATION_SPEED, height2, 0x0000);
+    draw_rectangle(xPos2, Y_LIMIT, height2, box_color2);
+    *pixel_ctrl_ptr = 1; //Write 1 to controller to start synchronizing with the VGA
+    wait_for_vsync();
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+    draw_rectangle(xPos2, y, height2, 0x0000);
+    y = Y_LIMIT;
     draw_rectangle(xPos2, y, height2, box_color2);
 
     //Move Rect 1 to the right
     int x;
-    for (x = xPos1; x <= xPos2; x++){
+    for (x = xPos1; x <= xPos2; x += ANIMATION_SPEED){
 
         //Erase previous rectangle
-        if (x >= xPos1 + 2){
-            draw_rectangle(x - 2, 0, height1, 0x0000); //Note that previous rectangle on the swapped buffer was two positions behind current position
+        if (x >= xPos1 + 2*ANIMATION_SPEED){
+            draw_rectangle(x - 2*ANIMATION_SPEED, 0, height1, 0x0000); //Note that previous rectangle on the swapped buffer was two positions behind current position
         }
 
         //Draw new rectangle
@@ -156,15 +163,22 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
         //done using the for loop
 
     }
-    x = x - 1;
-    draw_rectangle(x - 1, 0, height1, 0x0000);
+    x = x - ANIMATION_SPEED;
+    draw_rectangle(x - ANIMATION_SPEED, 0, height1, 0x0000);
+    draw_rectangle(xPos2, 0, height1, box_color1);
+    *pixel_ctrl_ptr = 1; //Write 1 to controller to start synchronizing with the VGA
+    wait_for_vsync();
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+    draw_rectangle(x, 0, height1, 0x0000);
+    x = xPos2;
     draw_rectangle(x, 0, height1, box_color1);
 
+
     //Move Rect 2 to xPos 1
-    for (x = xPos2; x >= xPos1; x--){
+    for (x = xPos2; x >= xPos1; x -= ANIMATION_SPEED){
 
         //Erase previous rectangle
-        draw_rectangle(x + 2, y, height2, 0x0000); //Note that previous rectangle on the swapped buffer was two positions behind current position        
+        draw_rectangle(x + 2*ANIMATION_SPEED, y, height2, 0x0000); //Note that previous rectangle on the swapped buffer was two positions behind current position        
 
         //Draw new rectangle
         draw_rectangle(x, y, height2, box_color2);
@@ -178,15 +192,21 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
         //done using the for loop
 
     }
-    x = x + 1;
-    draw_rectangle(x + 1, y, height2, 0x0000);
+    x = x + ANIMATION_SPEED;
+    draw_rectangle(x + ANIMATION_SPEED, y, height2, 0x0000);
+    draw_rectangle(xPos1, y, height2, box_color2);
+    *pixel_ctrl_ptr = 1; //Write 1 to controller to start synchronizing with the VGA
+    wait_for_vsync();
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+    draw_rectangle(x, y, height2, 0x0000);
+    x = xPos1;
     draw_rectangle(x, y, height2, box_color2);
 
     //Move Rect 2 back down
-    for (y = Y_LIMIT; y >= 0; y--){
+    for (y = Y_LIMIT; y >= 0; y -= ANIMATION_SPEED){
 
         //Erase previous rectangle
-        draw_rectangle(x, y + 2, height2, 0x0000); //Note that previous rectangle on the swapped buffer was two positions behind current position        
+        draw_rectangle(x, y + 2*ANIMATION_SPEED, height2, 0x0000); //Note that previous rectangle on the swapped buffer was two positions behind current position        
 
         //Draw new rectangle
         draw_rectangle(x, y, height2, box_color2);
@@ -200,8 +220,15 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
         //done using the for loop
 
     }
-    y = y + 1;
-    draw_rectangle(x, y + 1, height2, 0x0000);
+    y = y + ANIMATION_SPEED;
+    draw_rectangle(x, y + ANIMATION_SPEED, height2, 0x0000);
+    draw_rectangle(x, 0, height2, box_color2);
+    *pixel_ctrl_ptr = 1; //Write 1 to controller to start synchronizing with the VGA
+    wait_for_vsync();
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+    draw_rectangle(x, y, height2, 0x0000);
+    y = 0;
     draw_rectangle(x, y, height2, box_color2);
+
 
 }
