@@ -2,7 +2,9 @@
 #include <time.h>
 
 #define Y_LIMIT 120
-#define ANIMATION_SPEED 4
+#define ANIMATION_SPEED 17
+#define MAX_ANIMATION_SPEED 20
+#define HIGHLIGHT_COLOR 0xFFE0
 
 #define N 10
 #define HEIGHT 100
@@ -15,6 +17,7 @@
 
 
 //Gloabl Variables:
+volatile int * timer_addr; 
 volatile int pixel_buffer_start; 
 volatile int * pixel_ctrl_ptr;
 int numbers[N];
@@ -34,6 +37,12 @@ void draw_array();
 
 int main(void)
 {
+
+    /*Load A9 Timer*/
+    timer_addr = (int *) 0xFFFEC600;
+    *(timer_addr) = 200000000; //Load a value corresponding to 0.25 seconds
+    //*(timer_addr + 2) = 0b10; //Set A bit to 1, to let timer restart after reaching 0
+
     pixel_ctrl_ptr = (int *)0xFF203020;
 
     /* set front pixel buffer to start of FPGA On-chip memory */
@@ -133,23 +142,54 @@ void swap(int* x, int* y){
 // A function to implement bubble sort 
 void bubble_sort(int a[], int size) { 
 
+    
    for (int i = 0; i < size-1; i++){       
 
        for (int j = 0; j < size-i-1; j++){
+            int xPos1 = INITIAL + SPACE*j;
+            int xPos2 = INITIAL + SPACE*(j+1);
 
-           
-           if (a[j] > a[j+1]) {
+            //Highlight the rectangles
+            draw_rectangle(xPos1,0, a[j], HIGHLIGHT_COLOR);
+            draw_rectangle(xPos2,0, a[j+1], HIGHLIGHT_COLOR);
+            wait_for_vsync();
+            pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+            draw_rectangle(xPos1,0, a[j], HIGHLIGHT_COLOR);
+            draw_rectangle(xPos2,0, a[j+1], HIGHLIGHT_COLOR);
 
-              //Animate the swap of the rectangles
-              int xPos1 = INITIAL + SPACE*j;
-              int xPos2 = INITIAL + SPACE*(j+1);
-              animate_swap(xPos1,xPos2,a[j], a[j+1] ,color[1], color[1]);
+            *(timer_addr) = 50000000 * (MAX_ANIMATION_SPEED / ANIMATION_SPEED); 
+            *(timer_addr + 2) = 0b1; //Enable timer
+            while (*(timer_addr + 3) != 1){
+                //wait
+            }
+            *(timer_addr + 3) = 1; //Reset F bit to 0;
+            if (a[j] > a[j+1]) {
 
-            //Swap the array elements 
-              swap(&a[j], &a[j+1]); 
+                //Animate the swap of the rectangles
+                animate_swap(xPos1,xPos2,a[j], a[j+1] ,color[1], color[1]);
 
+                //Unhighlight the rectangles
+                draw_rectangle(xPos1,0, a[j+1], color[1]);
+                draw_rectangle(xPos2,0, a[j], color[1]);
+                wait_for_vsync();
+                pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+                draw_rectangle(xPos1,0, a[j+1], color[1]);
+                draw_rectangle(xPos2,0, a[j], color[1]);
 
-           }
+                //Swap the array elements 
+                swap(&a[j], &a[j+1]); 
+
+            }
+            else{
+                //Unhighlight the rectangles
+
+                draw_rectangle(xPos1,0, a[j], color[1]);
+                draw_rectangle(xPos2,0, a[j+1], color[1]);
+                wait_for_vsync();
+                pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+                draw_rectangle(xPos1,0, a[j], color[1]);
+                draw_rectangle(xPos2,0, a[j+1], color[1]);
+            }
 
        }
 
@@ -183,7 +223,7 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
         }
 
         //Draw new rectangle
-        draw_rectangle(xPos2, y, height2, box_color2);
+        draw_rectangle(xPos2, y, height2, HIGHLIGHT_COLOR);
 
         //swap buffers
         wait_for_vsync();
@@ -195,12 +235,12 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
     y = y-ANIMATION_SPEED; //store the last position of rect 2
     //Make sure image is aligned in the two buffers
     draw_rectangle(xPos2, y - ANIMATION_SPEED, height2, 0x0000);
-    draw_rectangle(xPos2, Y_LIMIT, height2, box_color2);
+    draw_rectangle(xPos2, Y_LIMIT, height2, HIGHLIGHT_COLOR);
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
     draw_rectangle(xPos2, y, height2, 0x0000);
     y = Y_LIMIT;
-    draw_rectangle(xPos2, y, height2, box_color2);
+    draw_rectangle(xPos2, y, height2, HIGHLIGHT_COLOR);
 
     //Move Rect 1 to the right
     int x;
@@ -215,7 +255,7 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
         }
 
         //Draw new rectangle
-        draw_rectangle(x, 0, height1, box_color1);
+        draw_rectangle(x, 0, height1, HIGHLIGHT_COLOR);
 
         //swap buffers
         wait_for_vsync();
@@ -227,12 +267,12 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
     }
     x = x - ANIMATION_SPEED;
     draw_rectangle(x - ANIMATION_SPEED, 0, height1, 0x0000);
-    draw_rectangle(xPos2, 0, height1, box_color1);
+    draw_rectangle(xPos2, 0, height1, HIGHLIGHT_COLOR);
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
     draw_rectangle(x, 0, height1, 0x0000);
     x = xPos2;
-    draw_rectangle(x, 0, height1, box_color1);
+    draw_rectangle(x, 0, height1, HIGHLIGHT_COLOR);
 
 
     //Move Rect 2 to xPos 1
@@ -248,7 +288,7 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
         
 
         //Draw new rectangle
-        draw_rectangle(x, y, height2, box_color2);
+        draw_rectangle(x, y, height2, HIGHLIGHT_COLOR);
 
         //swap buffers
         wait_for_vsync();
@@ -260,12 +300,12 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
     }
     x = x + ANIMATION_SPEED;
     draw_rectangle(x + ANIMATION_SPEED, y, height2, 0x0000);
-    draw_rectangle(xPos1, y, height2, box_color2);
+    draw_rectangle(xPos1, y, height2, HIGHLIGHT_COLOR);
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
     draw_rectangle(x, y, height2, 0x0000);
     x = xPos1;
-    draw_rectangle(x, y, height2, box_color2);
+    draw_rectangle(x, y, height2, HIGHLIGHT_COLOR);
 
     //Move Rect 2 back down
     for (y = Y_LIMIT; y >= 0; y -= ANIMATION_SPEED){
@@ -281,7 +321,7 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
         
 
         //Draw new rectangle
-        draw_rectangle(x, y, height2, box_color2);
+        draw_rectangle(x, y, height2, HIGHLIGHT_COLOR);
 
         //swap buffers
         wait_for_vsync();
@@ -293,12 +333,12 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
     }
     y = y + ANIMATION_SPEED;
     draw_rectangle(x, y + ANIMATION_SPEED, height2, 0x0000);
-    draw_rectangle(x, 0, height2, box_color2);
+    draw_rectangle(x, 0, height2, HIGHLIGHT_COLOR);
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
     draw_rectangle(x, y, height2, 0x0000);
     y = 0;
-    draw_rectangle(x, y, height2, box_color2);
+    draw_rectangle(x, y, height2, HIGHLIGHT_COLOR);
 
 
 }
