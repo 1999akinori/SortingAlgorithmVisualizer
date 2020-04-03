@@ -239,7 +239,13 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
     for (x = xPos2; x >= xPos1; x -= ANIMATION_SPEED){
 
         //Erase previous rectangle
-        draw_rectangle(x + 2*ANIMATION_SPEED, y, height2, 0x0000); //Note that previous rectangle on the swapped buffer was two positions behind current position        
+        if (x <= xPos2 - 2*ANIMATION_SPEED){
+            draw_rectangle(x + 2*ANIMATION_SPEED, y, height2, 0x0000); //Note that previous rectangle on the swapped buffer was two positions behind current position        
+        }
+        else{
+            draw_rectangle(xPos2, y, height2, 0x0000);
+        }
+        
 
         //Draw new rectangle
         draw_rectangle(x, y, height2, box_color2);
@@ -265,7 +271,14 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
     for (y = Y_LIMIT; y >= 0; y -= ANIMATION_SPEED){
 
         //Erase previous rectangle
-        draw_rectangle(x, y + 2*ANIMATION_SPEED, height2, 0x0000); //Note that previous rectangle on the swapped buffer was two positions behind current position        
+        if (y <= Y_LIMIT - 2*ANIMATION_SPEED){
+            draw_rectangle(x, y + 2*ANIMATION_SPEED, height2, 0x0000); //Note that previous rectangle on the swapped buffer was two positions behind current position        
+        }
+
+        else{
+            draw_rectangle(x, Y_LIMIT, height2, 0x0000);
+        }
+        
 
         //Draw new rectangle
         draw_rectangle(x, y, height2, box_color2);
@@ -297,6 +310,7 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
 void initialize(){
     for(int i=0; i < N; i++){
         numbers[i] = rand()%HEIGHT + 1;
+        //numbers[i] = 110 - i;
     }
 }
 
