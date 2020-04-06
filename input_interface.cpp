@@ -156,7 +156,9 @@ int main(void) {
             pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
         }
     }
-    
+    // Prevent highlighting 
+    current = -1;
+
     // Ahmed code below ...
 }
 
@@ -243,6 +245,7 @@ void draw_rectangle(int xPos, int height, short int box_color){
     }
 
 }
+
 
 void modify_array(int instruction){
     if(instruction == UP){
