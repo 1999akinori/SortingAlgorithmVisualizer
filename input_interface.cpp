@@ -3,6 +3,7 @@
 ******************************************************************************/
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 // address_map_arm.h --------------------------------------------------------------------------------------------------------
 #define BOARD                 "DE1-SoC"
@@ -58,6 +59,7 @@
 #define ICCPMR                0x04          // offset to interrupt priority mask reg
 #define ICCIAR                0x0C          // offset to interrupt acknowledge reg
 #define ICCEOIR               0x10          // offset to end of interrupt reg
+
 /* Interrupt controller (GIC) distributor interface(s) */
 #define MPCORE_GIC_DIST       0xFFFED000    // PERIPH_BASE + 0x1000
 #define ICDDCR                0x00          // offset to distributor control reg
@@ -121,8 +123,11 @@ int main(void) {
     *(PS2_ptr) = 0xFF; // reset
 
     current = 0;
+    
+    //When enter is placed the process it done
+    bool enter = false;
 
-    while (1) {
+    while (!enter) {
         PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
         RVALID = PS2_data & 0x8000; // extract the RVALID field
         RAVAIL = *(PS2_ptr) & 0xFFFF0000; // How many data are in the key
@@ -134,24 +139,25 @@ int main(void) {
             byte3 = PS2_data & 0xFF; //New data
             HEX_PS2(byte1, byte2, byte3);
         }
-        if(RAVAIL == 0){ // The FIFO is empty and all input have been recieved
+        if(byte1 == 0x5A | byte2 == 0x5A | byte3 == 0x5A) enter = true;
+        if(byte3 == 0xF0){ // The FIFO is empty and all input have been recieved
             int instruction = 0;
-            if((byte1 == 0xE0) & (byte2 == 0xE0)){ //Pressed arrow
-                if(byte3 == 0x75) instruction = UP;
-                if(byte3 == 0x6B) instruction = LEFT;
-                if(byte3 == 0x74) instruction = RIGHT;
-                if(byte3 == 0x72) instruction = DOWN;
-            }
+            if(byte1 == 0x75) instruction = UP;
+            if(byte1 == 0x6B) instruction = LEFT;
+            if(byte1 == 0x74) instruction = RIGHT;
+            if(byte1 == 0x72) instruction = DOWN;
             modify_array(instruction);
             byte1 = 0; // terminate instructions
             byte2 = 0;
             byte3 = 0;
+            clear_screen();
+            draw_array();
+            wait_for_vsync(); // swap front and back buffers on VGA vertical sync
+            pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
         }
-        clear_screen();
-        draw_array();
-        wait_for_vsync(); // swap front and back buffers on VGA vertical sync
-        pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
     }
+    
+    // Ahmed code below ...
 }
 
 
