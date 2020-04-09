@@ -31,6 +31,7 @@ volatile int * pixel_ctrl_ptr;
 int numbers[N];
 int current;
 short color[10] = {0xFFFF, 0xF800, 0x07E0, 0x001F, 0x3478, 0xEAFF, 0x07FF, 0xF81F, 0xFFE0, 0x9909}; //List of colors to choose from
+bool sortType;
 
 //Forward Declaration
 void HEX_PS2(char, char, char);
@@ -76,74 +77,82 @@ int main(void)
 
 
     srand(time(0));
-    initialize(); //Initialize array
-    /*Clear both buffers before doing any drawing*/
-    clear_screen(); //Clear buffer 1
-
-    int PS2_data, RVALID, RAVAIL;
-    char byte1 = 0, byte2 = 0, byte3 = 0; // Stores the data from the key
-    *(PS2_ptr) = 0xFF; // reset
-
-    current = 0;
     
-    //When enter is placed the process it done
-    bool enter = false;
+    //Bubble sort by default
+    sortType = true;
 
-    while (!enter) {
-        PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
-        RVALID = PS2_data & 0x8000; // extract the RVALID field
-        RAVAIL = *(PS2_ptr) & 0xFFFF0000; // How many data are in the key
-        if (RVALID) {
-            /* shift the next data byte into the display */
-            // byte1 byte2 byte3
-            byte1 = byte2;
-            byte2 = byte3;
-            byte3 = PS2_data & 0xFF; //New data
-            HEX_PS2(byte1, byte2, byte3);
+    while(true){
+        initialize(); //Initialize array
+        /*Clear both buffers before doing any drawing*/
+        clear_screen(); //Clear buffer 1
+
+        int PS2_data, RVALID, RAVAIL;
+        char byte1 = 0, byte2 = 0, byte3 = 0; // Stores the data from the key
+        *(PS2_ptr) = 0xFF; // reset
+
+        current = 0;
+        
+        //When enter is placed the process it done
+        bool enter = false;
+
+        while (!enter) {
+            PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
+            RVALID = PS2_data & 0x8000; // extract the RVALID field
+            RAVAIL = *(PS2_ptr) & 0xFFFF0000; // How many data are in the key
+            if (RVALID) {
+                /* shift the next data byte into the display */
+                // byte1 byte2 byte3
+                byte1 = byte2;
+                byte2 = byte3;
+                byte3 = PS2_data & 0xFF; //New data
+                HEX_PS2(byte1, byte2, byte3);
+            }
+            if(byte1 == 0x5A | byte2 == 0x5A | byte3 == 0x5A) enter = true;
+            if(byte1 == 0x32 | byte2 == 0x32 | byte3 == 0x32) sortType = true;
+            if(byte1 == 0x15 | byte2 == 0x15 | byte3 == 0x15) sortType = false;
+            if(byte3 == 0xF0){ // The FIFO is empty and all input have been recieved
+                int instruction = 0;
+                if(byte1 == 0x75) instruction = UP;
+                if(byte1 == 0x6B) instruction = LEFT;
+                if(byte1 == 0x74) instruction = RIGHT;
+                if(byte1 == 0x72) instruction = DOWN;
+                modify_array(instruction);
+                byte1 = 0; // terminate instructions
+                byte2 = 0;
+                byte3 = 0;
+                clear_screen();
+                draw_array();
+                wait_for_vsync(); // swap front and back buffers on VGA vertical sync
+                pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+            }
         }
-        if(byte1 == 0x5A | byte2 == 0x5A | byte3 == 0x5A) enter = true;
-        if(byte3 == 0xF0){ // The FIFO is empty and all input have been recieved
-            int instruction = 0;
-            if(byte1 == 0x75) instruction = UP;
-            if(byte1 == 0x6B) instruction = LEFT;
-            if(byte1 == 0x74) instruction = RIGHT;
-            if(byte1 == 0x72) instruction = DOWN;
-            modify_array(instruction);
-            byte1 = 0; // terminate instructions
-            byte2 = 0;
-            byte3 = 0;
-            clear_screen();
-            draw_array();
-            wait_for_vsync(); // swap front and back buffers on VGA vertical sync
-            pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+        // Prevent highlighting 
+        current = -1;
+
+        draw_array();
+        //swap buffers
+        wait_for_vsync();
+        pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+        clear_screen(); //Clear buffer 2
+        draw_array();
+        //swap buffers
+        wait_for_vsync();
+        pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+
+        /* set back pixel buffer to start of SDRAM memory */
+        *(pixel_ctrl_ptr + 1) = 0xC0000000;
+        pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
+
+        //swap buffers
+        wait_for_vsync();
+        pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+
+        if(sortType){
+            bubble_sort(numbers, N);
+        }else{
+            quick_sort(numbers, 0, N-1);
         }
     }
-    // Prevent highlighting 
-    current = -1;
-
-    draw_array();
-    //swap buffers
-    wait_for_vsync();
-    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
-    clear_screen(); //Clear buffer 2
-    draw_array();
-    //swap buffers
-    wait_for_vsync();
-    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
-
-
-
-    /* set back pixel buffer to start of SDRAM memory */
-    *(pixel_ctrl_ptr + 1) = 0xC0000000;
-    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
-
-
-    //swap buffers
-    wait_for_vsync();
-    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
-
-    //bubble_sort(numbers, N);
-    quick_sort(numbers, 0, N-1);
 }
 
 /****************************************************************************************
@@ -652,7 +661,6 @@ void animate_swap(int xPos1, int xPos2, int height1, int height2,  short int box
 
 //Draw a rectangle centered at xPos and with height h.
 void draw_rectangle(int xPos, int yPos, int height, short int box_color){
-    
     for (int i = xPos - 13 ; i <= xPos + 13; i++){
         for(int j = 239 -yPos - height; j <= 239 -yPos; j++){
             plot_pixel(i, j, box_color);
