@@ -202,9 +202,25 @@ void bubble_sort(int a[], int size) {
                 draw_rectangle(xPos2,0, a[j+1], color[1]);
             }
 
+            if(j == size - i - 2){
+                //Highlight the rectangles as done
+                color[j+1] = HIGHLIGHT_DONE;
+                draw_rectangle(xPos2,0, a[j+1], color[j+1]);
+                wait_for_vsync();
+                pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+                draw_rectangle(xPos2,0, a[j+1], color[j+1]);
+            }
+
        }
 
    }
+
+    //Highlight the rectangles as done
+    color[0] = HIGHLIGHT_DONE;
+    draw_rectangle(INITIAL,0, a[0], color[0]);
+    wait_for_vsync();
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+    draw_rectangle(INITIAL,0, a[0], color[0]);
 
 } 
 
