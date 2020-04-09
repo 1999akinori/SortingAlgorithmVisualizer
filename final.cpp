@@ -3,13 +3,19 @@
 #include <time.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include "address_map_arm.h"
+#define PS2_BASE 0xFF200100
+#define HEX3_HEX0_BASE        0xFF200020
+#define HEX5_HEX4_BASE        0xFF200030
 
 // Sorting Related
 #define Y_LIMIT 120
-#define ANIMATION_SPEED 20
+#define ANIMATION_SPEED 17
 #define MAX_ANIMATION_SPEED 20
 #define HIGHLIGHT_COLOR 0xFFE0
+#define HIGHLIGHT_PIVOT 0xA81E
+#define HIGHLIGHT_DONE 0x1F60
+#define HIGHLIGHT_SMALLEST_QUICKSORT 0x077D
+	
 // Both
 #define N 10
 #define HEIGHT 120
@@ -30,7 +36,7 @@ volatile int * pixel_ctrl_ptr;
 
 int numbers[N];
 int current;
-short color[10] = {0xFFFF, 0xF800, 0x07E0, 0x001F, 0x3478, 0xEAFF, 0x07FF, 0xF81F, 0xFFE0, 0x9909}; //List of colors to choose from
+short color[10] = {0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF}; //List of colors to choose from
 bool sortType;
 
 //Forward Declaration
@@ -41,6 +47,7 @@ void wait_for_vsync();
 void plot_pixel(int x, int y, short int line_color);
 void draw_rectangle(int xPos, int yPos, int height, short int box_color);
 void draw_array();
+void draw_array_initial();
 void modify_array(int instruction);
 
 
@@ -84,9 +91,16 @@ int main(void)
     while(true){
         initialize(); //Initialize array
         /*Clear both buffers before doing any drawing*/
-        clear_screen(); //Clear buffer 1
+		for (int i = 0; i < N; i ++){
+			color[i] = 0xF800;
+		}
+        clear_screen();
+        wait_for_vsync(); // swap front and back buffers on VGA vertical sync
+        pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+        clear_screen();
 
-        int PS2_data, RVALID, RAVAIL;
+
+        int PS2_data, RVALID;
         char byte1 = 0, byte2 = 0, byte3 = 0; // Stores the data from the key
         *(PS2_ptr) = 0xFF; // reset
 
@@ -98,7 +112,6 @@ int main(void)
         while (!enter) {
             PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
             RVALID = PS2_data & 0x8000; // extract the RVALID field
-            RAVAIL = *(PS2_ptr) & 0xFFFF0000; // How many data are in the key
             if (RVALID) {
                 /* shift the next data byte into the display */
                 // byte1 byte2 byte3
@@ -120,10 +133,11 @@ int main(void)
                 byte1 = 0; // terminate instructions
                 byte2 = 0;
                 byte3 = 0;
-                clear_screen();
-                draw_array();
+                //clear_screen();
+                draw_array_initial();
                 wait_for_vsync(); // swap front and back buffers on VGA vertical sync
                 pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+				draw_array_initial();
             }
         }
         // Prevent highlighting 
@@ -152,6 +166,13 @@ int main(void)
         }else{
             quick_sort(numbers, 0, N-1);
         }
+		
+		current = 0;
+		//Initiaize array to all reds
+		//for (int i = 0; i < N; i ++){
+		//	color[i] = 0xF800;
+		//}
+
     }
 }
 
@@ -219,9 +240,19 @@ void wait_for_vsync(){
 void draw_array(){
     for(int i=0; i < N; i++){
         if(i == current){
-            draw_rectangle(INITIAL + SPACE*i,0, numbers[i], color[2]); 
+            draw_rectangle(INITIAL + SPACE*i,0, numbers[i], color[i]); 
         }else{
-            draw_rectangle(INITIAL + SPACE*i,0, numbers[i], color[1]); 
+            draw_rectangle(INITIAL + SPACE*i,0, numbers[i], color[i]); 
+        }
+    }
+}
+
+void draw_array_initial(){
+    for(int i=0; i < N; i++){
+        if(i == current){
+            draw_rectangle(INITIAL + SPACE*i,0, numbers[i], 0xFFE0); 
+        }else{
+            draw_rectangle(INITIAL + SPACE*i,0, numbers[i], 0xF800); 
         }
     }
 }
@@ -281,8 +312,8 @@ void animate_double_swap(int xPos1, int xPos2, int height1, int height2,  short 
         }
 
         //Draw new rectangle
-        draw_rectangle(xPos1, y, height1, HIGHLIGHT_COLOR);
-        draw_rectangle(xPos2, y, height2, HIGHLIGHT_COLOR);
+        draw_rectangle(xPos1, y, height1, box_color1);
+        draw_rectangle(xPos2, y, height2, box_color2);
 
         //swap buffers
         wait_for_vsync();
@@ -296,15 +327,15 @@ void animate_double_swap(int xPos1, int xPos2, int height1, int height2,  short 
     //Make sure image is aligned in the two buffers
     draw_rectangle(xPos1, y - ANIMATION_SPEED, height1, 0x0000);
     draw_rectangle(xPos2, y - ANIMATION_SPEED, height2, 0x0000);
-    draw_rectangle(xPos1, Y_LIMIT, height1, HIGHLIGHT_COLOR);
-    draw_rectangle(xPos2, Y_LIMIT, height2, HIGHLIGHT_COLOR);
+    draw_rectangle(xPos1, Y_LIMIT, height1, box_color1);
+    draw_rectangle(xPos2, Y_LIMIT, height2, box_color2);
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
     draw_rectangle(xPos1, y, height1, 0x0000);
     draw_rectangle(xPos2, y, height2, 0x0000);
     y = Y_LIMIT;
-    draw_rectangle(xPos1, y, height1, HIGHLIGHT_COLOR);
-    draw_rectangle(xPos2, y, height2, HIGHLIGHT_COLOR);
+    draw_rectangle(xPos1, y, height1, box_color1);
+    draw_rectangle(xPos2, y, height2, box_color2);
 
 
     int x1, x2;
@@ -328,8 +359,8 @@ void animate_double_swap(int xPos1, int xPos2, int height1, int height2,  short 
         
 
         //Draw new rectangle
-        draw_rectangle(x2, y, height2, HIGHLIGHT_COLOR);
-        draw_rectangle(x1, y, height1, HIGHLIGHT_COLOR);
+        draw_rectangle(x2, y, height2, box_color2);
+        draw_rectangle(x1, y, height1, box_color1);
 
         //swap buffers
         wait_for_vsync();
@@ -343,16 +374,16 @@ void animate_double_swap(int xPos1, int xPos2, int height1, int height2,  short 
     x1 = x1 - ANIMATION_SPEED;
     draw_rectangle(x2 + ANIMATION_SPEED, y, height2, 0x0000);
     draw_rectangle(x1 - ANIMATION_SPEED, y, height1, 0x0000);
-    draw_rectangle(xPos1, y, height2, HIGHLIGHT_COLOR);
-    draw_rectangle(xPos2, y, height1, HIGHLIGHT_COLOR);
+    draw_rectangle(xPos1, y, height2, box_color2);
+    draw_rectangle(xPos2, y, height1, box_color1);
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
     draw_rectangle(x2, y, height2, 0x0000);
     draw_rectangle(x1, y, height1, 0x0000);
     x2 = xPos1;
     x1 = xPos2;
-    draw_rectangle(x2, y, height2, HIGHLIGHT_COLOR);
-    draw_rectangle(x1, y, height1, HIGHLIGHT_COLOR);
+    draw_rectangle(x2, y, height2, box_color2);
+    draw_rectangle(x1, y, height1, box_color1);
 
     //Move Rect 1 & 2 back down
     for (y = Y_LIMIT; y >= 0; y -= ANIMATION_SPEED){
@@ -370,8 +401,8 @@ void animate_double_swap(int xPos1, int xPos2, int height1, int height2,  short 
         
 
         //Draw new rectangle
-        draw_rectangle(x2, y, height2, HIGHLIGHT_COLOR);
-        draw_rectangle(x1, y, height1, HIGHLIGHT_COLOR);
+        draw_rectangle(x2, y, height2, box_color2);
+        draw_rectangle(x1, y, height1, box_color1);
 
         //swap buffers
         wait_for_vsync();
@@ -384,15 +415,15 @@ void animate_double_swap(int xPos1, int xPos2, int height1, int height2,  short 
     y = y + ANIMATION_SPEED;
     draw_rectangle(x2, y + ANIMATION_SPEED, height2, 0x0000);
     draw_rectangle(x1, y + ANIMATION_SPEED, height1, 0x0000);
-    draw_rectangle(x2, 0, height2, HIGHLIGHT_COLOR);
-    draw_rectangle(x1, 0, height1, HIGHLIGHT_COLOR);
+    draw_rectangle(x2, 0, height2, box_color1);
+    draw_rectangle(x1, 0, height1, box_color2);
     wait_for_vsync();
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
     draw_rectangle(x2, y, height2, 0x0000);
     draw_rectangle(x1, y, height1, 0x0000);
     y = 0;
-    draw_rectangle(x2, y, height2, HIGHLIGHT_COLOR);
-    draw_rectangle(x1, y, height1, HIGHLIGHT_COLOR);
+    draw_rectangle(x2, y, height2, box_color1);
+    draw_rectangle(x1, y, height1, box_color2);
 
 
 }
@@ -403,37 +434,127 @@ void animate_double_swap(int xPos1, int xPos2, int height1, int height2,  short 
     array, and places all smaller (smaller than pivot) 
    to left of pivot and all greater elements to right 
    of pivot */
-int partition (int a[], int low, int high) 
-{ 
+int partition (int a[], int low, int high) { 
     int pivot = a[high];    // pivot 
     int i = (low - 1);  // Index of smaller element 
   
+    //Highlight the pivot
+    int xPos1Pi = INITIAL + SPACE*high;
+    draw_rectangle(xPos1Pi,0, pivot, HIGHLIGHT_PIVOT);
+    wait_for_vsync();
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+    draw_rectangle(xPos1Pi,0, pivot, HIGHLIGHT_PIVOT);
+
     for (int j = low; j <= high- 1; j++) 
     { 
+        //Highlight the rectangle
+        int selectedRectPos = INITIAL + SPACE*j;
+        draw_rectangle(selectedRectPos,0, a[j], HIGHLIGHT_COLOR);
+        wait_for_vsync();
+        pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+        draw_rectangle(selectedRectPos,0, a[j], HIGHLIGHT_COLOR);
+        wait_for_vsync();
+        pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+
+        
         // If current element is smaller than the pivot 
         if (a[j] < pivot) 
         { 
             i++;    // increment index of smaller element 
+
+
+            //Wait
+            *(timer_addr) = 50000000 * (MAX_ANIMATION_SPEED / ANIMATION_SPEED); 
+            *(timer_addr + 2) = 0b1; //Enable timer
+            while (*(timer_addr + 3) != 1){
+                //wait
+            }
+            *(timer_addr + 3) = 1; //Reset F bit to 0;
+
+
+            //Don't swap if at the same location
+            if (i == j){
+                //Highlight the smallest element in blue
+                int smallestXpos = INITIAL + SPACE*i;
+                draw_rectangle(smallestXpos,0, a[i], HIGHLIGHT_SMALLEST_QUICKSORT);
+                wait_for_vsync();
+                pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+                draw_rectangle(smallestXpos,0, a[i], HIGHLIGHT_SMALLEST_QUICKSORT);
+                wait_for_vsync();
+                pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+                continue;
+            }
+
             //Animate the swap of the rectangles
             int xPos1 = INITIAL + SPACE*i;
             int xPos2 = INITIAL + SPACE*j;
-            animate_double_swap(xPos1,xPos2,a[i], a[j] ,color[1], color[1]);
+            animate_double_swap(xPos1,xPos2,a[i], a[j] , color[i], color[j]);
+
             swap(&a[i], &a[j]); 
+
+            //Highlight the smallest element in blue
+            int smallestXpos = INITIAL + SPACE*i;
+            draw_rectangle(smallestXpos,0, a[i], HIGHLIGHT_SMALLEST_QUICKSORT);
+            wait_for_vsync();
+            pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+            draw_rectangle(smallestXpos,0, a[i], HIGHLIGHT_SMALLEST_QUICKSORT);
+            wait_for_vsync();
+            pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+
         } 
+        else{
+            //Wait
+            *(timer_addr) = 50000000 * (MAX_ANIMATION_SPEED / ANIMATION_SPEED); 
+            *(timer_addr + 2) = 0b1; //Enable timer
+            while (*(timer_addr + 3) != 1){
+                //wait
+            }
+            *(timer_addr + 3) = 1; //Reset F bit to 0;
+
+            //Unhighlight 
+            int selectedRectPos = INITIAL + SPACE*j;
+            draw_rectangle(selectedRectPos,0, a[j], color[j]);
+            wait_for_vsync();
+            pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+            draw_rectangle(selectedRectPos,0, a[j], color[j]);
+            wait_for_vsync();
+            pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+        }
+
+
+
+        
     } 
 
-    //Animate the swap of the rectangles
-    int xPos1 = INITIAL + SPACE*(i+1);
-    int xPos2 = INITIAL + SPACE*(high);
-    animate_double_swap(xPos1,xPos2,a[i + 1], a[high] ,color[1], color[1]);
-    swap(&a[i + 1], &a[high]); 
+    //Wait
+    *(timer_addr) = 50000000 * (MAX_ANIMATION_SPEED / ANIMATION_SPEED); 
+    *(timer_addr + 2) = 0b1; //Enable timer
+    while (*(timer_addr + 3) != 1){
+        //wait
+    }
+    *(timer_addr + 3) = 1; //Reset F bit to 0;
+    //Animate the swap of the pivot 
+    if(i+1 != high){
+        int xPos1 = INITIAL + SPACE*(i+1);
+        int xPos2 = INITIAL + SPACE*(high);
+        animate_double_swap(xPos1,xPos2,a[i + 1], a[high] ,color[i+1], color[high]);
+        swap(&a[i + 1], &a[high]); 
+    }
+
+
+    //Indicate that the pivot has been placed in the right position
+    color[i+1] = HIGHLIGHT_DONE;
+    draw_array();
+    wait_for_vsync();
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+    draw_array();
     return (i + 1); 
 } 
   
 
 void quick_sort(int a[], int low, int high) 
 { 
-    if (low < high) 
+    if (low <= high) 
     { 
         /* pi is partitioning index, arr[p] is now 
            at right place */
@@ -454,7 +575,6 @@ void swap(int* x, int* y){
     *y = temp; //Value at y will be old value at x
 
 }
-
 // A function to implement bubble sort 
 void bubble_sort(int a[], int size) { 
 
@@ -482,7 +602,7 @@ void bubble_sort(int a[], int size) {
             if (a[j] > a[j+1]) {
 
                 //Animate the swap of the rectangles
-                animate_double_swap(xPos1,xPos2,a[j], a[j+1] ,color[1], color[1]);
+                animate_swap(xPos1,xPos2,a[j], a[j+1] ,color[1], color[1]);
 
                 //Unhighlight the rectangles
                 draw_rectangle(xPos1,0, a[j+1], color[1]);
@@ -507,12 +627,27 @@ void bubble_sort(int a[], int size) {
                 draw_rectangle(xPos2,0, a[j+1], color[1]);
             }
 
+            if(j == size - i - 2){
+                //Highlight the rectangles as done
+                color[j+1] = HIGHLIGHT_DONE;
+                draw_rectangle(xPos2,0, a[j+1], color[j+1]);
+                wait_for_vsync();
+                pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+                draw_rectangle(xPos2,0, a[j+1], color[j+1]);
+            }
+
        }
 
    }
 
-} 
+    //Highlight the rectangles as done
+    color[0] = HIGHLIGHT_DONE;
+    draw_rectangle(INITIAL,0, a[0], color[0]);
+    wait_for_vsync();
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+    draw_rectangle(INITIAL,0, a[0], color[0]);
 
+} 
 
 
 /**********************************************************************************************************************
@@ -668,3 +803,7 @@ void draw_rectangle(int xPos, int yPos, int height, short int box_color){
     }
 
 }
+
+	
+	
+	
