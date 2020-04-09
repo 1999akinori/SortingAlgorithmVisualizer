@@ -4,8 +4,6 @@
 #include <stdio.h>
 #include <stdbool.h>
 #define PS2_BASE 0xFF200100
-#define HEX3_HEX0_BASE        0xFF200020
-#define HEX5_HEX4_BASE        0xFF200030
 
 // Sorting Related
 #define Y_LIMIT 120
@@ -100,7 +98,7 @@ int main(void)
         clear_screen();
 
 
-        int PS2_data, RVALID;
+        int PS2_data, RVALID, RAVAIL;
         char byte1 = 0, byte2 = 0, byte3 = 0; // Stores the data from the key
         *(PS2_ptr) = 0xFF; // reset
 
@@ -109,16 +107,24 @@ int main(void)
         //When enter is placed the process it done
         bool enter = false;
 
+        RAVAIL = *(PS2_ptr) & 0xFFFF0000; // isolate the RAVAIL values
+
+        while(RAVAIL != 0){ // Wait until the FIFO is cleared
+            PS2_data = *(PS2_ptr);
+            RVALID = PS2_data & 0x8000;
+            RAVAIL = *(PS2_ptr) & 0xFFFF0000;
+        }
+
         while (!enter) {
             PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
             RVALID = PS2_data & 0x8000; // extract the RVALID field
+           
             if (RVALID) {
                 /* shift the next data byte into the display */
                 // byte1 byte2 byte3
                 byte1 = byte2;
                 byte2 = byte3;
                 byte3 = PS2_data & 0xFF; //New data
-                HEX_PS2(byte1, byte2, byte3);
             }
             if(byte1 == 0x5A | byte2 == 0x5A | byte3 == 0x5A) enter = true;
             if(byte1 == 0x32 | byte2 == 0x32 | byte3 == 0x32) sortType = true;
@@ -129,15 +135,19 @@ int main(void)
                 if(byte1 == 0x6B) instruction = LEFT;
                 if(byte1 == 0x74) instruction = RIGHT;
                 if(byte1 == 0x72) instruction = DOWN;
+                draw_rectangle(INITIAL+current*SPACE, 0, numbers[current], 0x0000);
+                wait_for_vsync(); // swap front and back buffers on VGA vertical sync
+                pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+                draw_rectangle(INITIAL+current*SPACE, 0, numbers[current], 0x0000);
                 modify_array(instruction);
                 byte1 = 0; // terminate instructions
                 byte2 = 0;
                 byte3 = 0;
-                //clear_screen();
                 draw_array_initial();
                 wait_for_vsync(); // swap front and back buffers on VGA vertical sync
                 pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
 				draw_array_initial();
+
             }
         }
         // Prevent highlighting 
@@ -176,33 +186,7 @@ int main(void)
     }
 }
 
-/****************************************************************************************
-* Subroutine to show a string of HEX data on the HEX displays
-****************************************************************************************/
-void HEX_PS2(char b1, char b2, char b3) {
-    volatile int * HEX3_HEX0_ptr = (int *)HEX3_HEX0_BASE;
-    volatile int * HEX5_HEX4_ptr = (int *)HEX5_HEX4_BASE;
-    /* SEVEN_SEGMENT_DECODE_TABLE gives the on/off settings for all segments in
-    * a single 7-seg display in the DE1-SoC Computer, for the hex digits 0 - F
-    */
-    unsigned char seven_seg_decode_table[] = {
-        0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07,
-        0x7F, 0x67, 0x77, 0x7C, 0x39, 0x5E, 0x79, 0x71};
-    unsigned char hex_segs[] = {0, 0, 0, 0, 0, 0, 0, 0};
-    unsigned int shift_buffer, nibble;
-    unsigned char code;
-    int i;
-    shift_buffer = (b1 << 16) | (b2 << 8) | b3;
-    for (i = 0; i < 6; ++i) {
-        nibble = shift_buffer & 0x0000000F; // character is in rightmost nibble
-        code = seven_seg_decode_table[nibble];
-        hex_segs[i] = code;
-    shift_buffer = shift_buffer >> 4;
-    }
-    /* drive the hex displays */
-    *(HEX3_HEX0_ptr) = *(int *)(hex_segs);
-    *(HEX5_HEX4_ptr) = *(int *)(hex_segs + 4);
-}
+
 
 void initialize(){
     for(int i=0; i < N; i++){
